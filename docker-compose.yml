@@ -1,0 +1,24 @@
+# Môi trường local: DB và dịch vụ phụ (REQ-002).
+# Dùng qua: `docker compose up -d --wait` (xem README).
+name: clinic-local
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER:-app}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-app}
+      POSTGRES_DB: ${DB_NAME:-app}
+    ports:
+      # Chỉ mở ở loopback; đổi cổng bằng DB_PORT nếu bị trùng.
+      - "127.0.0.1:${DB_PORT:-5442}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  db-data:
