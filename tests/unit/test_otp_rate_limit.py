@@ -1,4 +1,7 @@
 """REQ-003 / REQ-027: giới hạn gửi lại OTP (unit)."""
+import os
+import tempfile
+import threading
 import unittest
 from datetime import datetime, timedelta, timezone
 
@@ -20,7 +23,7 @@ class FakeClock:
 class OtpRateLimiterTest(unittest.TestCase):
     def setUp(self):
         self.clock = FakeClock()
-        self.limiter = rl.OtpRateLimiter(rl.SqliteOtpSendStore.open(), self.clock)
+        self.limiter = rl.OtpRateLimiter(rl.SqliteOtpSendStore.open(":memory:"), self.clock)
         self.phone = "0912345678"
 
     def send_five(self):
@@ -113,6 +116,75 @@ class OtpRateLimiterTest(unittest.TestCase):
         d = self.limiter.request_send(self.phone)
         self.assertTrue(d.allowed)
         self.assertEqual(d.remaining_in_window, 3)
+
+
+    def test_window_boundary_exactly_60_minutes(self):
+        # 5 mã dồn trong 4 phút đầu: t=0,1,2,3,4 phút
+        for _ in range(5):
+            self.assertTrue(self.limiter.request_send(self.phone).allowed)
+            self.clock.advance(minutes=1)
+        t0 = datetime(2025, 1, 1, tzinfo=timezone.utc)
+        # còn 1 ms nữa mã đầu (t=0) rời cửa sổ -> vẫn bị từ chối, retry_at = t0 + 60 phút
+        self.clock.now = t0 + timedelta(minutes=60) - timedelta(milliseconds=1)
+        d = self.limiter.request_send(self.phone)
+        self.assertFalse(d.allowed)
+        self.assertEqual(d.reason, rl.REASON_LIMIT)
+        self.assertEqual(d.retry_at, t0 + timedelta(minutes=60))
+        # đúng now - 60 phút == mã đầu: mã đó đã ra khỏi cửa sổ -> được gửi
+        self.clock.now = t0 + timedelta(minutes=60)
+        self.assertTrue(self.limiter.request_send(self.phone).allowed)
+        # t=61 phút: mã t=1 phút vừa rời cửa sổ (đúng biên) -> còn 4 mã trong cửa sổ, được gửi
+        self.clock.now = t0 + timedelta(minutes=61)
+        d = self.limiter.request_send(self.phone)
+        self.assertTrue(d.allowed)
+        self.assertEqual(d.remaining_in_window, 0)
+
+    def test_cancel_send_refunds_quota(self):
+        d = self.limiter.request_send(self.phone)
+        self.limiter.cancel_send(d)
+        self.assertTrue(self.limiter.request_send(self.phone).allowed)
+
+
+class ConcurrencyTest(unittest.TestCase):
+    """Hai store (hai kết nối) trỏ cùng một file DB: kiểm tra-rồi-ghi phải nguyên tử."""
+
+    def _run_concurrently(self, limiters, phone, attempts=8):
+        results, barrier = [], threading.Barrier(len(limiters) * attempts)
+
+        def worker(limiter):
+            barrier.wait()
+            results.append(limiter.request_send(phone).allowed)
+
+        threads = [threading.Thread(target=worker, args=(lim,))
+                   for lim in limiters for _ in range(attempts)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        return results
+
+    def test_concurrent_requests_respect_cooldown(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "otp.db")
+            now = datetime(2025, 1, 1, tzinfo=timezone.utc)
+            limiters = [rl.OtpRateLimiter(rl.SqliteOtpSendStore.open(path), lambda: now)
+                        for _ in range(2)]
+            results = self._run_concurrently(limiters, "+84912345678")
+            self.assertEqual(results.count(True), 1)
+
+    def test_concurrent_requests_respect_window_limit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "otp.db")
+            t0 = datetime(2025, 1, 1, tzinfo=timezone.utc)
+            store = rl.SqliteOtpSendStore.open(path)
+            for i in range(4):  # 4 mã trước đó, cách nhau 2 phút
+                store.record("+84912345678", t0 + timedelta(minutes=2 * i))
+            now = t0 + timedelta(minutes=10)
+            limiters = [rl.OtpRateLimiter(rl.SqliteOtpSendStore.open(path), lambda: now)
+                        for _ in range(2)]
+            results = self._run_concurrently(limiters, "+84912345678")
+            self.assertEqual(results.count(True), 1)
+            self.assertEqual(len(store.sends_since("+84912345678", t0 - timedelta(days=1))), 5)
 
 
 class TimeFormatTest(unittest.TestCase):

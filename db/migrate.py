@@ -69,8 +69,9 @@ def discover(directory=DEFAULT_DIR):
     return migrations
 
 
-def connect(path):
-    conn = sqlite3.connect(path, isolation_level=None)
+def connect(path, **kwargs):
+    """Open `path` (autocommit) and ensure the bookkeeping table exists; kwargs go to sqlite3.connect."""
+    conn = sqlite3.connect(path, isolation_level=None, **kwargs)
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute(
         "CREATE TABLE IF NOT EXISTS %s ("

@@ -7,6 +7,7 @@ Route (theo docs/api-conventions.md):
 Thời điểm trả về (`*_at`) là ISO-8601 theo Asia/Ho_Chi_Minh (+07:00).
 """
 import json
+import os
 import re
 import uuid
 from urllib.parse import parse_qs
@@ -14,11 +15,13 @@ from urllib.parse import parse_qs
 from clinic.tk import otp_rate_limit as rl
 from clinic.tk.timefmt import TZ_NAME, to_vn_iso, utcnow
 
-PHONE_RE = re.compile(r"^\+?\d{9,15}$")
+# Số di động Việt Nam (nhận được SMS): đầu số 3/5/7/8/9 + 8 chữ số, không kể tiền tố quốc gia.
+VN_MOBILE_RE = re.compile(r"^[35789]\d{8}$")
 
 _STATUS = {
     200: "200 OK", 201: "201 Created", 400: "400 Bad Request", 404: "404 Not Found",
     405: "405 Method Not Allowed", 422: "422 Unprocessable Entity", 429: "429 Too Many Requests",
+    502: "502 Bad Gateway",
 }
 
 
@@ -29,14 +32,23 @@ class _HttpError(Exception):
 
 
 def _normalize_phone(raw):
+    """Chuẩn hóa về E.164 (+84xxxxxxxxx). '0912345678', '84912345678', '+84 912 345 678'
+    đều cho cùng một khóa, dùng cho giới hạn gửi và khi gọi sender."""
     if not isinstance(raw, str):
         raise _HttpError(422, "VALIDATION_FAILED", "Request validation failed.", [
             {"field": "phone", "code": "REQUIRED", "message": "Phone must be a non-empty string."}])
     phone = re.sub(r"[\s.\-]", "", raw)
-    if not PHONE_RE.match(phone):
+    for prefix in ("+84", "84", "0"):
+        if phone.startswith(prefix):
+            national = phone[len(prefix):]
+            break
+    else:
+        national = ""
+    if not VN_MOBILE_RE.match(national):
         raise _HttpError(422, "VALIDATION_FAILED", "Request validation failed.", [
-            {"field": "phone", "code": "INVALID_FORMAT", "message": "Phone is not a valid number."}])
-    return phone
+            {"field": "phone", "code": "INVALID_FORMAT",
+             "message": "Phone is not a valid Vietnamese mobile number."}])
+    return "+84" + national
 
 
 def _rate_limited(decision):
@@ -58,10 +70,22 @@ class OtpApp:
     """`clock` trả datetime có timezone (mặc định: UTC hiện tại); test truyền đồng hồ giả lập.
     `sender(phone, sent_at)` là hook gửi SMS thực tế, chỉ được gọi khi yêu cầu được chấp nhận."""
 
-    def __init__(self, limiter=None, clock=None, sender=None):
+    def __init__(self, limiter, clock=None, sender=None):
+        if limiter is None:
+            raise ValueError("limiter is required: OTP send history must be persisted and shared")
         self.clock = clock or utcnow
-        self.limiter = limiter or rl.OtpRateLimiter(rl.SqliteOtpSendStore.open(), self.clock)
+        self.limiter = limiter
         self.sender = sender
+
+    @classmethod
+    def from_database(cls, path=None, clock=None, sender=None):
+        """Dựng app với lịch sử gửi lưu trong file SQLite `path` (mặc định $DATABASE_PATH).
+        Thiếu cấu hình thì báo lỗi thay vì lặng lẽ dùng DB tạm trong bộ nhớ."""
+        path = path or os.environ.get("DATABASE_PATH")
+        if not path:
+            raise ValueError("database path is required (argument or DATABASE_PATH)")
+        clock = clock or utcnow
+        return cls(rl.OtpRateLimiter(rl.SqliteOtpSendStore.open(path), clock), clock, sender)
 
     # --- handlers ---
     def _create(self, environ):
@@ -77,7 +101,13 @@ class OtpApp:
         if not d.allowed:
             raise _rate_limited(d)
         if self.sender:
-            self.sender(phone, d.sent_at)
+            try:
+                self.sender(phone, d.sent_at)
+            except Exception:
+                # SMS chưa gửi được: hoàn lại lần gửi để người dùng không bị trừ hạn mức.
+                self.limiter.cancel_send(d)
+                raise _HttpError(502, "OTP_SEND_FAILED",
+                                 "OTP could not be delivered. Please try again.")
         return 201, {"data": {
             "phone": phone,
             "sent_at": to_vn_iso(d.sent_at),

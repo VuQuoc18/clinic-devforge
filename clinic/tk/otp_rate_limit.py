@@ -7,6 +7,7 @@ Yêu cầu bị từ chối không được ghi nhận là một lần gửi.
 """
 import sqlite3
 import threading
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -38,6 +39,7 @@ class Decision:
     sent_at: Optional[datetime] = None  # khi được gửi
     next_resend_at: Optional[datetime] = None  # thời điểm sớm nhất được gửi lại sau quyết định này
     remaining_in_window: int = 0
+    record_id: Optional[int] = None  # id bản ghi gửi, dùng cho cancel_send
 
     @property
     def retry_after_seconds(self):
@@ -57,10 +59,24 @@ class SqliteOtpSendStore:
         self.lock = threading.RLock()
 
     @classmethod
-    def open(cls, path=":memory:"):
-        conn = sqlite3.connect(path, isolation_level=None, check_same_thread=False)
-        migrate.up(_prepare(conn), migrate.discover())
+    def open(cls, path):
+        """Mở (và migrate) DB tại `path`. `path` bắt buộc; ":memory:" chỉ nên dùng trong test."""
+        conn = migrate.connect(path, check_same_thread=False)
+        migrate.up(conn, migrate.discover())
         return cls(conn)
+
+    @contextmanager
+    def transaction(self):
+        """Khóa ghi (BEGIN IMMEDIATE) để kiểm tra-rồi-ghi là nguyên tử giữa các tiến trình/kết nối."""
+        with self.lock:
+            self.conn.execute("BEGIN IMMEDIATE")
+            try:
+                yield
+            except BaseException:
+                if self.conn.in_transaction:
+                    self.conn.execute("ROLLBACK")
+                raise
+            self.conn.execute("COMMIT")
 
     def sends_since(self, phone, since):
         rows = self.conn.execute(
@@ -69,15 +85,12 @@ class SqliteOtpSendStore:
         return [_from_ms(r[0]) for r in rows]
 
     def record(self, phone, at):
-        self.conn.execute("INSERT INTO otp_sends (phone, sent_at) VALUES (?, ?)", (phone, _to_ms(at)))
+        cur = self.conn.execute("INSERT INTO otp_sends (phone, sent_at) VALUES (?, ?)",
+                                (phone, _to_ms(at)))
+        return cur.lastrowid
 
-
-def _prepare(conn):
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS %s ("
-        "version TEXT PRIMARY KEY, name TEXT NOT NULL, checksum TEXT NOT NULL, "
-        "applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)" % migrate.TABLE)
-    return conn
+    def delete(self, record_id):
+        self.conn.execute("DELETE FROM otp_sends WHERE id = ?", (record_id,))
 
 
 class OtpRateLimiter:
@@ -112,15 +125,21 @@ class OtpRateLimiter:
 
     def request_send(self, phone):
         """Kiểm tra và, nếu được phép, ghi nhận một lần gửi OTP."""
-        with self.store.lock:
+        with self.store.transaction():
             now = self.clock()
             recent, reason, retry_at = self._evaluate(phone, now)
             remaining = max(0, MAX_PER_WINDOW - len(recent))
             if reason:
                 return Decision(False, now, reason, retry_at, remaining_in_window=remaining)
-            self.store.record(phone, now)
+            record_id = self.store.record(phone, now)
             next_at = now + RESEND_COOLDOWN
             if len(recent) + 1 >= MAX_PER_WINDOW:
                 next_at = max(next_at, recent[-(MAX_PER_WINDOW - 1)] + WINDOW)
             return Decision(True, now, sent_at=now, next_resend_at=next_at,
-                            remaining_in_window=remaining - 1)
+                            remaining_in_window=remaining - 1, record_id=record_id)
+
+    def cancel_send(self, decision):
+        """Hoàn lại một lần gửi đã ghi nhận (khi gửi SMS thất bại)."""
+        if decision.record_id is not None:
+            with self.store.lock:
+                self.store.delete(decision.record_id)

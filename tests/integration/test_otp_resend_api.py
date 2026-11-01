@@ -38,7 +38,9 @@ class OtpResendApiTest(unittest.TestCase):
     def setUp(self):
         self.now = datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
         self.sent = []
-        self.app = OtpApp(clock=lambda: self.now, sender=lambda p, t: self.sent.append(p))
+        clock = lambda: self.now  # noqa: E731
+        limiter = rl.OtpRateLimiter(rl.SqliteOtpSendStore.open(":memory:"), clock)
+        self.app = OtpApp(limiter, clock=clock, sender=lambda p, t: self.sent.append(p))
         self.api = Client(self.app)
 
     def advance(self, **kw):
@@ -53,7 +55,8 @@ class OtpResendApiTest(unittest.TestCase):
         self.assertEqual(d["resend_available_at"], "2025-01-01T07:01:00+07:00")
         self.assertEqual(d["timezone"], "Asia/Ho_Chi_Minh")
         self.assertEqual(d["remaining_in_window"], 4)
-        self.assertEqual(self.sent, ["0912345678"])
+        self.assertEqual(self.sent, ["+84912345678"])
+        self.assertEqual(d["phone"], "+84912345678")
 
     def test_resend_before_60s_rejected_with_remaining_time(self):
         self.api.send()
@@ -123,6 +126,66 @@ class OtpResendApiTest(unittest.TestCase):
     def test_phone_formatting_is_normalized(self):
         self.api.send("0912 345 678")
         self.assertEqual(self.api.send("0912345678")[0], 429)
+
+    def test_equivalent_phone_formats_share_one_limit(self):
+        self.assertEqual(self.api.send("0912345678")[0], 201)
+        for variant in ("+84912345678", "84912345678", "+84 912-345.678", "0912 345 678"):
+            status, _, body = self.api.send(variant)
+            self.assertEqual(status, 429, variant)
+            self.assertEqual(body["error"]["reason"], rl.REASON_COOLDOWN)
+        self.assertEqual(self.sent, ["+84912345678"])
+        self.assertFalse(self.api.status("+84912345678")[2]["data"]["can_resend"])
+
+    def test_equivalent_formats_cannot_bypass_five_per_hour(self):
+        formats = ["0912345678", "+84912345678", "84912345678", "0912 345 678", "+84-912-345-678"]
+        for i, f in enumerate(formats):
+            if i:
+                self.advance(seconds=60)
+            self.assertEqual(self.api.send(f)[0], 201)
+        self.advance(seconds=60)
+        status, _, body = self.api.send("0912345678")
+        self.assertEqual((status, body["error"]["reason"]), (429, rl.REASON_LIMIT))
+
+    def test_invalid_vietnamese_numbers_rejected(self):
+        for bad in ("123456789", "0123456789", "091234567", "09123456789", "+85912345678",
+                    "+1912345678", "0212345678", "+84091234567"):
+            status, _, body = self.api.send(bad)
+            self.assertEqual((status, body["error"]["code"]), (422, "VALIDATION_FAILED"), bad)
+        self.assertEqual(self.sent, [])
+
+    def test_sender_failure_returns_standard_error_and_refunds(self):
+        def failing(phone, at):
+            raise RuntimeError("smsc down: secret-detail")
+        self.app.sender = failing
+        status, headers, body = self.api.send()
+        self.assertEqual(status, 502)
+        self.assertEqual(body["error"]["code"], "OTP_SEND_FAILED")
+        self.assertNotIn("secret", json.dumps(body))
+        self.assertEqual(headers["X-Request-Id"], body["error"]["request_id"])
+        # lần gửi được hoàn lại: gửi lại ngay vẫn được
+        self.app.sender = lambda p, t: self.sent.append(p)
+        status, _, body = self.api.send()
+        self.assertEqual((status, body["data"]["remaining_in_window"]), (201, 4))
+
+    def test_limiter_is_required(self):
+        with self.assertRaises(ValueError):
+            OtpApp(None)
+
+    def test_from_database_requires_path(self):
+        old = os.environ.pop("DATABASE_PATH", None)
+        try:
+            with self.assertRaises(ValueError):
+                OtpApp.from_database()
+        finally:
+            if old is not None:
+                os.environ["DATABASE_PATH"] = old
+
+    def test_from_database_uses_shared_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "otp.db")
+            clock = lambda: self.now  # noqa: E731
+            self.assertEqual(Client(OtpApp.from_database(path, clock)).send()[0], 201)
+            self.assertEqual(Client(OtpApp.from_database(path, clock)).send()[0], 429)
 
     def test_validation_errors(self):
         status, _, body = self.api.call("POST", "/v1/otp-codes", {"phone": "abc"})
