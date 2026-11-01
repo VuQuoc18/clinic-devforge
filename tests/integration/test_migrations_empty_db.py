@@ -13,6 +13,7 @@ MIGRATIONS = os.path.join(ROOT, "db", "migrations")
 # Expected schema: table -> ordered column names. Update together with new migrations.
 EXPECTED_TABLES = {
     "app_info": ["key", "value"],
+    "otp_sends": ["id", "phone", "sent_at"],
     "schema_migrations": ["version", "name", "checksum", "applied_at"],
 }
 
