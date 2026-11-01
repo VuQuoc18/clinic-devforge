@@ -1,10 +1,12 @@
-# Clinic backend
+# Clinic DevForge
 
 > **Trạng thái hiện tại (đọc trước):** repo mới có DB/migration, môi trường local (Docker) và tài liệu.
 > **Chưa có mã ứng dụng backend (web server/API) và chưa có frontend**, nên chưa có lệnh "chạy backend"
 > hay "chạy frontend". Stack chính thức và kiểu repo (monorepo hay tách repo) **đang chờ tech lead xác nhận**
 > (Q1, Q2 trong [khảo sát hiện trạng](docs/khao-sat-hien-trang-repo.md), liên quan DEC-0001).
-> README này chỉ ghi những bước **thực sự chạy được hôm nay**; mục
+> README này chỉ ghi những bước **thực sự chạy được hôm nay**. Vì vậy tiêu chí "chạy được cả backend lẫn
+> frontend chỉ bằng README" của REQ-001 **chưa đạt**, và task chỉ hoàn thành phần README + mục lục tài liệu
+> (cần PM/tech lead xác nhận tách phạm vi); mục
 > [Backend và frontend](#backend-và-frontend-chờ-xác-nhận-stack) sẽ được bổ sung khi stack được chốt.
 
 ## Cấu trúc repo
@@ -29,7 +31,7 @@ Chi tiết và lý do chưa tách `backend/`, `frontend/`: [docs/README.md](docs
 | Công cụ | Dùng cho | Ghi chú |
 |---|---|---|
 | Git | clone repo | |
-| Python 3.9+ (đã kiểm tra với 3.12) | migration runner, test | `python3 -m pytest` cần `pip install pytest` |
+| Python 3.9+ (đã kiểm tra với 3.12) | migration runner, test | `pip install -r requirements-dev.txt` (nên dùng venv, xem Bắt đầu nhanh) |
 | Docker kèm Docker Compose v2 | DB local | Tùy chọn; test tích hợp liên quan Docker tự bỏ qua nếu thiếu |
 | make | lệnh tắt | Tùy chọn |
 
@@ -40,7 +42,8 @@ Node.js **chưa cần** (chưa có frontend).
 ```bash
 git clone https://github.com/VuQuoc18/clinic-devforge.git
 cd clinic-devforge
-pip install pytest
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r requirements-dev.txt
 python3 -m pytest tests
 ```
 
@@ -85,13 +88,16 @@ docker compose exec db pg_isready -U app -d app
 
 Runner hiện tại chỉ dùng thư viện chuẩn Python và áp migration lên **SQLite** (mặc định `app.db`):
 
+> `make migrate` chỉ tạo hoặc cập nhật file **SQLite cục bộ** (`app.db`), **không** áp lên
+> PostgreSQL trong container `db` của Docker.
+
 ```bash
 make migrate            # áp mọi migration chưa chạy
 make migrate-status     # xem applied / pending
 ```
 
-> Lưu ý: DB local trong Docker là PostgreSQL còn runner migration đang làm việc với SQLite.
-> Việc thống nhất DB đang chờ xác nhận stack (Q1); chưa có bước áp migration lên PostgreSQL.
+> Việc thống nhất DB (PostgreSQL hay SQLite) đang chờ xác nhận stack (Q1); chưa có bước áp
+> migration lên PostgreSQL.
 
 Quy ước và các lệnh khác (rollback, `--target`): [docs/db-migrations.md](docs/db-migrations.md).
 

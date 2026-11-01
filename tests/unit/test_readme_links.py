@@ -38,7 +38,35 @@ def test_every_doc_is_listed_in_docs_index():
             assert f.name in index, "docs/README.md thiếu %s" % f.name
 
 
-def test_readme_states_missing_backend_frontend_honestly():
+def test_readme_has_backend_frontend_section():
     text = README.read_text(encoding="utf-8")
-    assert "Chưa có mã ứng dụng backend" in text
-    assert "Q1" in text and "Q2" in text
+    assert re.search(r"^## Backend và frontend", text, re.M)
+
+
+def test_readme_has_run_commands_when_backend_or_frontend_exist():
+    text = README.read_text(encoding="utf-8").lower()
+    for name in ("backend", "frontend"):
+        if (ROOT / name).is_dir():
+            assert "cd %s" % name in text, "README thiếu lệnh chạy cho %s/" % name
+
+
+def github_slug(heading):
+    slug = heading.strip().lower()
+    slug = re.sub(r"[^\w\- ]", "", slug)
+    return slug.replace(" ", "-")
+
+
+def anchors(path):
+    text = path.read_text(encoding="utf-8")
+    text = re.sub(r"```.*?```", "", text, flags=re.S)
+    return {github_slug(h) for h in re.findall(r"^#{1,6}\s+(.+)$", text, re.M)}
+
+
+def test_anchor_links_resolve():
+    for doc in (README, DOCS_INDEX):
+        text = doc.read_text(encoding="utf-8")
+        for target, frag in re.findall(r"\]\(([^)#\s]*)#([^)\s]+)\)", text):
+            if re.match(r"^[a-z]+://", target):
+                continue
+            path = doc if not target else (doc.parent / target)
+            assert frag in anchors(path), "%s: anchor hỏng %s#%s" % (doc.name, target, frag)
