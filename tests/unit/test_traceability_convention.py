@@ -21,7 +21,7 @@ def traced_tests():
     for path in sorted((ROOT / "tests").rglob("test_*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) and node.name.startswith("test"):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test"):
                 doc = (ast.get_docstring(node) or "").splitlines()
                 m = LEADING_TAGS_RE.match(doc[0]) if doc else None
                 if m:
