@@ -44,3 +44,11 @@ python -m pytest tests
 ```
 
 Test tích hợp `tests/integration/test_local_env.py` tự bỏ qua nếu không có Docker.
+
+## Truy vết test theo mã BR/FR/REQ
+
+Mã BR/FR/REQ (giữ nguyên dạng, ví dụ `BR-TD-01`, `FR-TD-01`, `REQ-009`) được ghi trong tên/docstring test. Quy ước và ví dụ: `docs/test-traceability.md`. Tìm test theo mã:
+
+```bash
+grep -rn --include="*.py" "BR-TD-01" tests
+```
