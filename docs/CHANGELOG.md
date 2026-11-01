@@ -4,6 +4,7 @@ Mỗi dòng trỏ về PR, ADR hoặc PRD liên quan. Mới nhất ở trên.
 
 | Ngày | Loại | Mô tả | Liên quan |
 | --- | --- | --- | --- |
+| 2026-11-01 | added | Đăng nhập nhân viên bằng email và mật khẩu tại /quan-tri (mật khẩu băm scrypt, cập nhật lần đăng nhập cuối); tách miền xác thực nhân viên và bệnh nhân (cookie, khóa ký riêng). | TASK-0017, REQ-015 |
 | 2026-11-01 | added | Bổ sung quy ước migration schema DB và lệnh chạy migration bằng một lệnh, đã kiểm tra áp toàn bộ migration lên DB trống ở môi trường test. | TASK-0037, PR #6, PRD-0004 |
 | 2026-11-01 | added | Bổ sung tài liệu quy ước API cho các API mới: định dạng lỗi, phân trang, đặt tên route, kèm ví dụ request/response cho từng mục. | TASK-0036, PR #5, PRD-0004 |
 | 2026-11-01 | added | Thêm lệnh duy nhất để dựng DB và các dịch vụ phụ ở môi trường local; README có hướng dẫn chạy, dừng và dọn dẹp. | TASK-0031, PR #3, PRD-0004 |

@@ -37,6 +37,18 @@ Kiểm tra nhanh DB đã nhận kết nối:
 docker compose exec db pg_isready -U app -d app
 ```
 
+## Đăng nhập nhân viên (/quan-tri)
+
+```bash
+make migrate
+STAFF_PASSWORD='...' python3 -m app create-staff nhanvien@phongkham.vn --full-name "Tên"
+AUTH_SECRET='<chuoi-bi-mat>' AUTH_COOKIE_SECURE=0 python3 -m app serve   # http://127.0.0.1:8000/quan-tri
+```
+
+- Trang: `/quan-tri/dang-nhap`, trang quản lý: `/quan-tri/quan-ly`, API: `POST /quan-tri/v1/auth/login`.
+- Bệnh nhân (số điện thoại + OTP) dùng `POST /v1/auth/patient/login`. Hai miền xác thực dùng cookie và khóa ký riêng, không chấp nhận chéo.
+- `AUTH_COOKIE_SECURE=0` chỉ dùng khi chạy local qua HTTP.
+
 ## Test
 
 ```bash

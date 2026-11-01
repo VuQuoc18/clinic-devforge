@@ -13,6 +13,9 @@ MIGRATIONS = os.path.join(ROOT, "db", "migrations")
 # Expected schema: table -> ordered column names. Update together with new migrations.
 EXPECTED_TABLES = {
     "app_info": ["key", "value"],
+    "staff_users": ["id", "email", "password_hash", "full_name", "created_at", "last_login_at"],
+    "patients": ["id", "phone", "created_at"],
+    "patient_otps": ["patient_id", "otp_hash", "expires_at"],
     "schema_migrations": ["version", "name", "checksum", "applied_at"],
 }
 
