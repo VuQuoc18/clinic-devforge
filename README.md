@@ -44,3 +44,11 @@ python -m pytest tests
 ```
 
 Test tích hợp `tests/integration/test_local_env.py` tự bỏ qua nếu không có Docker.
+
+## Frontend
+
+Màn hình đăng nhập bệnh nhân nằm ở `frontend/`; xem `docs/patient-login-screen.md`.
+
+```bash
+cd frontend && npm install && npm test
+```
