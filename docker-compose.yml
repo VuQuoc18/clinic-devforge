@@ -5,7 +5,11 @@ name: clinic-local
 services:
   db:
     image: postgres:16-alpine
+    # Múi giờ mặc định Asia/Ho_Chi_Minh (REQ-004); khớp config/timezone.json.
+    command: ["postgres", "-c", "timezone=Asia/Ho_Chi_Minh", "-c", "log_timezone=Asia/Ho_Chi_Minh"]
     environment:
+      TZ: Asia/Ho_Chi_Minh
+      PGTZ: Asia/Ho_Chi_Minh
       POSTGRES_USER: ${DB_USER:-app}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-app}
       POSTGRES_DB: ${DB_NAME:-app}

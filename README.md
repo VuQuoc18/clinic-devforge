@@ -44,3 +44,14 @@ python -m pytest tests
 ```
 
 Test tích hợp `tests/integration/test_local_env.py` tự bỏ qua nếu không có Docker.
+
+## Múi giờ mặc định (REQ-004)
+
+Múi giờ mặc định của hệ thống là `Asia/Ho_Chi_Minh` cho dev, test và prod, **không phụ thuộc
+múi giờ máy chủ**. Nguồn duy nhất: `config/timezone.json`.
+
+- Backend: `app/config.py` (`get_settings()`, chọn môi trường bằng `APP_ENV=dev|test|prod`).
+- Tiện ích thời gian: `app/timeutil.py` lấy múi giờ từ `app.config`; luôn trả datetime có múi giờ.
+- DB: `app/db.py` lưu/đọc `TIMESTAMP` kèm offset `+07:00`; Postgres chạy với `timezone=Asia/Ho_Chi_Minh`
+  (`docker-compose.yml`), phiên kết nối dùng `app.db.postgres_connect_kwargs()`.
+- Frontend: đọc `config/timezone.json` (chưa có mã frontend trong repo) và truyền làm `timeZone` khi định dạng giờ.
