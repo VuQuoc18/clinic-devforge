@@ -56,6 +56,10 @@ make migrate          # tương đương: make -C backend migrate
 make migrate-status   # xem trạng thái migration
 ```
 
+DB SQLite mặc định vẫn là `app.db` ở **gốc repo** (như trước khi dời). Đường dẫn tương đối trong
+`DATABASE_PATH=...` được tính từ gốc repo. Chỉ khi chạy `make` trực tiếp trong `backend/` thì
+mặc định mới là `backend/app.db`.
+
 Hiện runner migration là script SQL (`backend/db/migrate.py`, xem `docs/db-migrations.md`);
 việc chuyển sang Alembic nằm ở task riêng. Backend chưa có web server/entrypoint để chạy.
 
@@ -66,9 +70,12 @@ Chưa chạy được: `frontend/` chưa có mã nguồn. Hướng dẫn chạy 
 ## Test
 
 ```bash
+make test                          # từ gốc; tương đương cd backend && python3 -m pytest tests
 cd backend && python -m pytest tests
 sh backend/tests/check_conventions.sh
 sh backend/tests/check_api_conventions.sh
 ```
+
+Hướng dẫn rebase nhánh cũ: `docs/rebase-monorepo.md`.
 
 Test tích hợp `backend/tests/integration/test_local_env.py` tự bỏ qua nếu không có Docker.
