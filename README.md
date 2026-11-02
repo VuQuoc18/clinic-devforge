@@ -37,6 +37,14 @@ Kiểm tra nhanh DB đã nhận kết nối:
 docker compose exec db pg_isready -U app -d app
 ```
 
+## Migration DB
+
+Schema DB được quản lý bằng Alembic trong `backend/` (xem [docs/db-migrations.md](docs/db-migrations.md)):
+
+```bash
+cd backend && alembic upgrade head
+```
+
 ## Test
 
 ```bash
@@ -44,3 +52,4 @@ python -m pytest tests
 ```
 
 Test tích hợp `tests/integration/test_local_env.py` tự bỏ qua nếu không có Docker.
+Test `tests/integration/test_migrations_empty_db.py` cần PostgreSQL (mặc định DB của docker compose, hoặc đặt `TEST_DATABASE_URL`); không có thì bỏ qua.

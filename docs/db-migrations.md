@@ -1,68 +1,78 @@
 # Quy ước migration schema DB (REQ-008)
 
-Phạm vi: thay đổi **schema** DB. Việc chuyển dữ liệu từ Excel nằm ngoài phạm vi tài liệu này.
+Phạm vi: thay đổi **schema** DB PostgreSQL bằng **Alembic** (SQLAlchemy). Alembic thay hoàn toàn
+runner SQL cũ; dữ liệu cũ không được giữ và revision đầu (`0001`) được sinh lại từ model hiện tại.
+Việc chuyển dữ liệu từ Excel nằm ngoài phạm vi tài liệu này.
 
-## Vị trí và đặt tên
-
-Migration nằm trong `db/migrations/`, mỗi migration là một cặp file SQL:
+## Bố cục (trong `backend/`)
 
 ```
-db/migrations/<VERSION>_<mo_ta>.up.sql     # bắt buộc: áp dụng thay đổi
-db/migrations/<VERSION>_<mo_ta>.down.sql   # rollback (khuyến khích; nếu thiếu thì không rollback được)
+backend/alembic.ini                         # cấu hình Alembic
+backend/clinic_db/base.py                   # Base (DeclarativeBase), metadata cho autogenerate
+backend/clinic_db/models.py                 # model SQLAlchemy (nguồn sự thật của schema)
+backend/clinic_db/url.py                    # đọc DATABASE_URL, đổi sang driver asyncpg
+backend/migrations/env.py                   # env Alembic (async)
+backend/migrations/versions/<REV>_<mo_ta>.py
 ```
 
-- `VERSION`: số thứ tự 4 chữ số, bắt đầu `0001`, tăng liên tục, **không được nhảy số**.
+## Đặt tên revision
+
+- Tên file: `<REV>_<mo_ta>.py`; `REV` là số thứ tự 4 chữ số, bắt đầu `0001`, tăng liên tục,
+  **không nhảy số**, và trùng với `revision` trong file.
 - `mo_ta`: `snake_case` chữ thường/số, động từ + đối tượng (`create_...`, `add_..._to_...`).
-- Regex: `^\d{4}_[a-z0-9]+(_[a-z0-9]+)*\.(up|down)\.sql$`. File sai tên làm runner báo lỗi.
+- Regex: `^\d{4}_[a-z0-9]+(_[a-z0-9]+)*\.py$`.
+- Tạo revision mới (số kế tiếp, ví dụ `0002`):
 
-Ví dụ:
+```bash
+cd backend
+alembic revision --autogenerate -m create_users --rev-id 0002
+```
 
-```
-db/migrations/0001_create_app_info.up.sql
-db/migrations/0001_create_app_info.down.sql
-db/migrations/0002_create_users.up.sql
-db/migrations/0002_create_users.down.sql
-db/migrations/0003_add_email_to_users.up.sql
-```
+Luôn đọc lại file sinh ra trước khi commit.
 
 ## Thứ tự áp dụng
 
-- Áp tuần tự theo `VERSION` tăng dần; chỉ áp những version chưa có trong bảng `schema_migrations`.
-- Ví dụ: DB trống → `0001`, `0002`, `0003`. DB đã ở `0002` → chỉ áp `0003`.
-- Mỗi migration chạy trong **một transaction** cùng việc ghi `schema_migrations`; lỗi thì rollback migration đó và dừng.
-- Hai nhánh cùng tạo cùng số: người merge sau đổi lại số (đánh số lại trước khi merge).
+- Các revision tạo thành **một chuỗi thẳng** (`down_revision` của `0002` là `0001`, ...). Không tạo nhiều head.
+- Áp theo thứ tự chuỗi; Alembic ghi version hiện tại vào bảng `alembic_version`.
+- Mỗi revision chạy trong một transaction (DDL của PostgreSQL có transaction); lỗi thì rollback revision đó và dừng.
+- Hai nhánh cùng tạo cùng số: người merge sau đổi lại số và `down_revision` trước khi merge.
 
 ## Quy tắc
 
-- **Không sửa migration đã merge/áp dụng**; muốn đổi thì thêm migration mới. Runner lưu checksum SHA-256 của `.up.sql` và từ chối chạy nếu checksum đã áp dụng bị đổi.
-- Mỗi lệnh SQL kết thúc bằng `;`. Một migration làm một thay đổi có ý nghĩa gắn kết.
-- Khi thêm migration, cập nhật `EXPECTED_TABLES` trong `tests/integration/test_migrations_empty_db.py`.
+- **Không sửa revision đã merge/áp dụng**; muốn đổi thì thêm revision mới.
+- Sửa model xong phải có revision tương ứng: `alembic check` không được báo thay đổi chưa có migration.
+- Viết `downgrade()` cho mỗi revision (dùng chủ yếu cho dev/test; production ưu tiên roll forward).
+- Khi thêm revision, cập nhật `EXPECTED_TABLES` trong `tests/integration/test_migrations_empty_db.py`.
 
 ## Cách áp dụng (một lệnh)
 
-```
-make migrate                          # DB mặc định: app.db (đổi: make migrate DATABASE_PATH=/path/x.db)
-python3 db/migrate.py up --db PATH    # tương đương; hoặc đặt biến môi trường DATABASE_PATH
-python3 db/migrate.py up --db PATH --target 0002   # áp đến version 0002
-python3 db/migrate.py status --db PATH             # applied / pending
-```
+Cài phụ thuộc: `pip install -r backend/requirements.txt`. DB local: `docker compose up -d --wait` (xem README).
 
-Runner chỉ dùng thư viện chuẩn Python 3 (driver SQLite). Bảng `schema_migrations(version, name, checksum, applied_at)` được tạo tự động.
-
-## Rollback
-
-```
-python3 db/migrate.py down --db PATH             # lùi 1 migration mới nhất
-python3 db/migrate.py down --db PATH --steps 2   # lùi 2
+```bash
+cd backend
+export DATABASE_URL=postgresql://app:app@127.0.0.1:5442/app   # mặc định nếu không đặt
+alembic upgrade head
 ```
 
-Chạy `.down.sql` theo thứ tự ngược, trong transaction, rồi xoá bản ghi trong `schema_migrations`. Thiếu `.down.sql` thì lỗi và không đổi gì. Trên production ưu tiên "roll forward" (migration mới sửa lỗi); rollback dùng chủ yếu cho dev/test.
+Hoặc từ gốc repo: `make migrate`. Xem trạng thái: `alembic current` / `make migrate-status`.
+`DATABASE_URL` dạng `postgresql://...` được tự đổi sang driver `asyncpg`.
+
+## Rollback (dev/test)
+
+```bash
+cd backend
+alembic downgrade -1      # lùi 1 revision
+alembic downgrade base    # lùi hết
+```
 
 ## Kiểm thử
 
-```
-make test
+```bash
+python -m pytest tests
 ```
 
-- Unit test: `tests/unit/test_migrate.py` (đặt tên, thứ tự, checksum, rollback transaction).
-- Integration test: `tests/integration/test_migrations_empty_db.py` áp toàn bộ migration thật lên DB test trống và so khớp schema mong đợi.
+- Unit test: `tests/unit/test_db_config.py` (chuẩn hóa URL, đặt tên và thứ tự revision, model đăng ký).
+- Integration test: `tests/integration/test_migrations_empty_db.py` tạo DB PostgreSQL trống, chạy
+  `alembic upgrade head`, kiểm tra các bảng chính, `alembic check`, downgrade/upgrade lại. Dùng DB của
+  docker compose (cổng `5442`) hoặc đặt `TEST_DATABASE_URL` (user cần quyền `CREATE DATABASE`); không kết nối được thì test bị bỏ qua.
+- CI (đề xuất): chạy PostgreSQL service rồi `python -m pytest tests` để luôn kiểm tra `alembic upgrade head` trên DB trống.
