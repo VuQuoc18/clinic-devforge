@@ -1,4 +1,14 @@
-# Clinic backend
+# Clinic
+
+## Cấu trúc repo (monorepo)
+
+```
+backend/    # mã backend: common/, db/ (migration), tests/, Makefile, pytest.ini
+frontend/   # frontend (React, Vite, TypeScript, shadcn/ui, pnpm) - chưa có mã nguồn
+docs/       # tài liệu
+docker-compose.yml   # DB và dịch vụ phụ cho môi trường local
+```
+
 
 ## Chạy môi trường local (DB và dịch vụ phụ)
 
@@ -40,7 +50,7 @@ docker compose exec db pg_isready -U app -d app
 ## Test
 
 ```bash
-python -m pytest tests
+cd backend && python -m pytest tests
 ```
 
-Test tích hợp `tests/integration/test_local_env.py` tự bỏ qua nếu không có Docker.
+Test tích hợp `backend/tests/integration/test_local_env.py` tự bỏ qua nếu không có Docker.

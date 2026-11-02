@@ -38,7 +38,7 @@ Kết luận: trên `master` **chưa có nền nào**. Mã duy nhất là nhánh
 | Quản lý phụ thuộc | `requirements.txt` không pin chặt (`>=`); không lockfile | `requirements.txt` |
 | README | Rỗng trên master; nhánh TASK-0001 cũng không hướng dẫn chạy | — |
 | `.gitignore` | Tối thiểu: `app.db`, `__pycache__/`, `.pytest_cache/` | `.gitignore` |
-| Kiểu repo | Hiện là một repo đơn, bố cục phẳng (`app/`, `migrations/`, `tests/` ở gốc). Chưa có `backend/`, `frontend/`. **Chưa kết luận monorepo hay tách repo** | — |
+| Kiểu repo | Hiện là một repo đơn, bố cục phẳng (`app/`, `migrations/`, `tests/` ở gốc). Chưa có `backend/`, `frontend/`. **Chưa kết luận monorepo hay tách repo** (cập nhật TASK-0042: đã chuyển sang monorepo `backend/`, `frontend/`, `docs/`; `common/`, `db/`, `tests/` nằm trong `backend/`) | — |
 | Thư mục tài liệu | Chưa có trước task này; `docs/` được tạo bởi tài liệu này | — |
 
 ## 4. Đã có / còn thiếu theo REQ
