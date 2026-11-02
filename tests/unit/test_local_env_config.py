@@ -33,3 +33,9 @@ def test_readme_database_url_matches_compose_defaults():
     assert "${DB_USER:-app}" in COMPOSE
     assert "${DB_PASSWORD:-app}" in COMPOSE
     assert "${DB_NAME:-app}" in COMPOSE
+
+
+def test_compose_pins_postgres_version_and_uses_pg_isready():
+    assert re.search(r"image:\s*postgres:\d+", COMPOSE)
+    assert "pg_isready" in COMPOSE
+    assert "/var/lib/postgresql/data" in COMPOSE
