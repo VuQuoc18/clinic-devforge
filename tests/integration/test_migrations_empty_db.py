@@ -1,82 +1,132 @@
-"""REQ-008: apply every real migration onto an empty DB and verify the schema."""
+"""REQ-008: `alembic upgrade head` trên PostgreSQL trống tạo đúng các bảng chính.
+
+Cần một PostgreSQL có quyền CREATE DATABASE. Mặc định dùng DB của docker compose local
+(`docker compose up -d --wait`); đổi bằng biến TEST_DATABASE_URL. Không kết nối được thì bỏ qua.
+"""
+import asyncio
 import os
-import sqlite3
 import subprocess
 import sys
-import tempfile
-import unittest
+import uuid
+from pathlib import Path
 
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-SCRIPT = os.path.join(ROOT, "db", "migrate.py")
-MIGRATIONS = os.path.join(ROOT, "db", "migrations")
+import pytest
+from sqlalchemy import inspect, text
+from sqlalchemy.engine import make_url
+from sqlalchemy.ext.asyncio import create_async_engine
 
-# Expected schema: table -> ordered column names. Update together with new migrations.
+ROOT = Path(__file__).resolve().parents[2]
+BACKEND = ROOT / "backend"
+sys.path.insert(0, str(BACKEND))
+
+from clinic_db.url import to_async_url  # noqa: E402
+
+ADMIN_URL = os.environ.get("TEST_DATABASE_URL", "postgresql://app:app@127.0.0.1:5442/postgres")
+
+# Bảng chính -> danh sách cột. Cập nhật cùng revision mới.
 EXPECTED_TABLES = {
     "app_info": ["key", "value"],
-    "schema_migrations": ["version", "name", "checksum", "applied_at"],
+    "alembic_version": ["version_num"],
 }
 
 
-def cli(*args):
-    return subprocess.run([sys.executable, SCRIPT, *args], capture_output=True, text=True)
+def _admin_engine():
+    return create_async_engine(to_async_url(ADMIN_URL), isolation_level="AUTOCOMMIT")
 
 
-class MigrateEmptyDbTest(unittest.TestCase):
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.db = os.path.join(self.tmp.name, "test.db")
-
-    def tearDown(self):
-        self.tmp.cleanup()
-
-    def tables(self):
-        conn = sqlite3.connect(self.db)
-        try:
-            names = [r[0] for r in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")]
-            return {n: [c[1] for c in conn.execute("PRAGMA table_info(%s)" % n)] for n in names}
-        finally:
-            conn.close()
-
-    def test_apply_all_on_empty_db(self):
-        self.assertFalse(os.path.exists(self.db))
-        r = cli("up", "--db", self.db)
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(self.tables(), EXPECTED_TABLES)
-
-        files = sorted(f for f in os.listdir(MIGRATIONS) if f.endswith(".up.sql"))
-        conn = sqlite3.connect(self.db)
-        versions = [r[0] for r in conn.execute("SELECT version FROM schema_migrations ORDER BY version")]
-        conn.close()
-        self.assertEqual(versions, [f.split("_")[0] for f in files])
-
-    def test_rerun_is_noop(self):
-        cli("up", "--db", self.db)
-        r = cli("up", "--db", self.db)
-        self.assertEqual(r.returncode, 0)
-        self.assertIn("nothing to apply", r.stdout)
-
-    def test_status_and_env_var(self):
-        env = dict(os.environ, DATABASE_PATH=self.db)
-        r = subprocess.run([sys.executable, SCRIPT, "up"], capture_output=True, text=True, env=env)
-        self.assertEqual(r.returncode, 0, r.stderr)
-        r = cli("status", "--db", self.db)
-        self.assertNotIn("pending", r.stdout)
-
-    def test_rollback_all_then_reapply(self):
-        cli("up", "--db", self.db)
-        n = len([f for f in os.listdir(MIGRATIONS) if f.endswith(".up.sql")])
-        r = cli("down", "--db", self.db, "--steps", str(n))
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(list(self.tables()), ["schema_migrations"])
-        self.assertEqual(cli("up", "--db", self.db).returncode, 0)
-        self.assertEqual(self.tables(), EXPECTED_TABLES)
-
-    def test_missing_db_arg_fails(self):
-        env = {k: v for k, v in os.environ.items() if k != "DATABASE_PATH"}
-        r = subprocess.run([sys.executable, SCRIPT, "up"], capture_output=True, text=True, env=env)
-        self.assertNotEqual(r.returncode, 0)
+async def _admin_exec(sql):
+    engine = _admin_engine()
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text(sql))
+    finally:
+        await engine.dispose()
 
 
-if __name__ == "__main__":
-    unittest.main()
+def _reachable():
+    try:
+        asyncio.run(_admin_exec("SELECT 1"))
+        return True
+    except Exception:
+        return False
+
+
+pytestmark = pytest.mark.skipif(not _reachable(), reason="Không có PostgreSQL để test")
+
+
+@pytest.fixture
+def empty_db_url():
+    name = "alembic_it_" + uuid.uuid4().hex[:12]
+    asyncio.run(_admin_exec('CREATE DATABASE "%s"' % name))
+    url = make_url(ADMIN_URL).set(database=name).render_as_string(hide_password=False)
+    yield url
+    asyncio.run(_admin_exec('DROP DATABASE IF EXISTS "%s" WITH (FORCE)' % name))
+
+
+def alembic(url, *args):
+    env = {**os.environ, "DATABASE_URL": url}
+    return subprocess.run([sys.executable, "-m", "alembic", *args], cwd=BACKEND, env=env,
+                          capture_output=True, text=True, timeout=120)
+
+
+async def _schema(url):
+    engine = create_async_engine(to_async_url(url))
+    try:
+        async with engine.connect() as conn:
+            def read(sync_conn):
+                insp = inspect(sync_conn)
+                return {t: [c["name"] for c in insp.get_columns(t)] for t in insp.get_table_names()}
+            tables = await conn.run_sync(read)
+            versions = []
+            if "alembic_version" in tables:
+                versions = [r[0] for r in await conn.execute(text("SELECT version_num FROM alembic_version"))]
+            return tables, versions
+    finally:
+        await engine.dispose()
+
+
+def schema(url):
+    return asyncio.run(_schema(url))
+
+
+def test_upgrade_head_on_empty_db_creates_tables(empty_db_url):
+    assert schema(empty_db_url)[0] == {}
+    r = alembic(empty_db_url, "upgrade", "head")
+    assert r.returncode == 0, r.stderr
+    tables, versions = schema(empty_db_url)
+    assert tables == EXPECTED_TABLES
+    heads = alembic(empty_db_url, "heads").stdout.split()[0]
+    assert versions == [heads]
+
+
+def test_upgrade_head_is_idempotent(empty_db_url):
+    assert alembic(empty_db_url, "upgrade", "head").returncode == 0
+    r = alembic(empty_db_url, "upgrade", "head")
+    assert r.returncode == 0, r.stderr
+    assert schema(empty_db_url)[0] == EXPECTED_TABLES
+
+
+def test_models_match_migrations(empty_db_url):
+    assert alembic(empty_db_url, "upgrade", "head").returncode == 0
+    r = alembic(empty_db_url, "check")
+    assert r.returncode == 0, r.stderr + r.stdout
+
+
+def test_downgrade_base_then_reapply(empty_db_url):
+    assert alembic(empty_db_url, "upgrade", "head").returncode == 0
+    assert alembic(empty_db_url, "downgrade", "base").returncode == 0
+    assert list(schema(empty_db_url)[0]) == ["alembic_version"]
+    assert alembic(empty_db_url, "upgrade", "head").returncode == 0
+    assert schema(empty_db_url)[0] == EXPECTED_TABLES
+
+
+def test_legacy_runner_removed_and_unreferenced():
+    legacy = "db/" + "migrate" + ".py"
+    assert not (ROOT / legacy).exists()
+    tracked = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard"],
+                             cwd=ROOT, capture_output=True, text=True).stdout.split()
+    for rel in tracked:
+        p = ROOT / rel
+        if not p.is_file() or rel.endswith(".pyc"):
+            continue
+        assert legacy not in p.read_text(encoding="utf-8", errors="ignore"), rel
