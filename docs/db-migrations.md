@@ -43,7 +43,7 @@ backend/db/migrations/0003_add_email_to_users.up.sql
 ```
 make migrate                         # từ gốc: DB mặc định <gốc>/app.db (đổi: make migrate DATABASE_PATH=/path/x.db)
 make -C backend migrate              # trong backend/: DB mặc định backend/app.db
-python3 backend/db/migrate.py up --db PATH    # tương đương; hoặc đặt biến môi trường DATABASE_PATH
+python3 backend/db/migrate.py up --db PATH    # gọi trực tiếp: PATH tương đối tính theo thư mục hiện tại (cwd), không phải gốc repo; hoặc đặt biến môi trường DATABASE_PATH
 python3 backend/db/migrate.py up --db PATH --target 0002   # áp đến version 0002
 python3 backend/db/migrate.py status --db PATH             # applied / pending
 ```

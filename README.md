@@ -70,8 +70,9 @@ Chưa chạy được: `frontend/` chưa có mã nguồn. Hướng dẫn chạy 
 ## Test
 
 ```bash
-make test                          # từ gốc; tương đương cd backend && python3 -m pytest tests
+python -m pytest backend/tests     # từ gốc, chạy toàn bộ test
 cd backend && python -m pytest tests
+make test                          # từ gốc; giữ nguyên runner cũ (unittest discover), chỉ gồm test dạng unittest
 sh backend/tests/check_conventions.sh
 sh backend/tests/check_api_conventions.sh
 ```

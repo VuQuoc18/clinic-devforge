@@ -25,7 +25,7 @@ git rebase origin/master   # git phát hiện rename nên thường tự áp tha
 - File mới thêm vào `common/`, `db/`, `tests/` ở nhánh cũ: chuyển vào `backend/` tương ứng.
   Test `backend/tests/unit/test_repo_layout.py` sẽ fail nếu còn thư mục này ở gốc.
 - Import (`from common...`, `from db...`) giữ nguyên; chạy test từ `backend/`
-  (`cd backend && python -m pytest tests` hoặc `make test` ở gốc).
+  (`cd backend && python -m pytest tests`, hoặc `python -m pytest backend/tests` từ gốc).
 - Đường dẫn trong lệnh/CI: `python3 db/migrate.py` → `python3 backend/db/migrate.py`.
 
 ## DB dev mặc định

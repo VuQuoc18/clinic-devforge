@@ -10,4 +10,4 @@ migrate-status:
 	python3 db/migrate.py status --db "$(DATABASE_PATH)"
 
 test:
-	python3 -m pytest tests
+	python3 -m unittest discover -s tests -t . -v
