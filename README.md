@@ -1,4 +1,14 @@
-# Clinic backend
+# Clinic
+
+## Cấu trúc repo (monorepo)
+
+```
+backend/    # mã backend: common/, db/ (migration), tests/, Makefile, pytest.ini
+frontend/   # frontend (React, Vite, TypeScript, shadcn/ui, pnpm) - chưa có mã nguồn
+docs/       # tài liệu
+docker-compose.yml   # DB và dịch vụ phụ cho môi trường local
+```
+
 
 ## Chạy môi trường local (DB và dịch vụ phụ)
 
@@ -37,10 +47,37 @@ Kiểm tra nhanh DB đã nhận kết nối:
 docker compose exec db pg_isready -U app -d app
 ```
 
+## Chạy backend (migration)
+
+Chạy từ gốc repo (Makefile ở gốc chuyển tiếp sang `backend/`):
+
+```bash
+make migrate          # tương đương: make -C backend migrate
+make migrate-status   # xem trạng thái migration
+```
+
+DB SQLite mặc định vẫn là `app.db` ở **gốc repo** (như trước khi dời). Đường dẫn tương đối trong
+`DATABASE_PATH=...` được tính từ gốc repo. Chỉ khi chạy `make` trực tiếp trong `backend/` thì
+mặc định mới là `backend/app.db`.
+
+Hiện runner migration là script SQL (`backend/db/migrate.py`, xem `docs/db-migrations.md`);
+việc chuyển sang Alembic thuộc task riêng (#43; theo DEC-0112 phải cùng PR với việc dời cấu trúc, chưa gộp). Backend chưa có web server/entrypoint (FastAPI) để chạy; phần này và frontend thuộc các task sau, REQ-001 chưa đóng bằng PR này.
+
+## Frontend
+
+Chưa chạy được: `frontend/` chưa có mã nguồn. Hướng dẫn chạy (pnpm, Vite) sẽ được bổ sung ở task dựng frontend.
+
 ## Test
 
 ```bash
-python -m pytest tests
+python -m pytest backend/tests     # từ gốc, chạy toàn bộ test
+cd backend && python -m pytest tests
+make test                          # từ gốc; giữ nguyên runner cũ (unittest discover), chỉ gồm test dạng unittest
+                                   # (hai script check_*.sh cũng được gọi bởi pytest: integration/test_check_scripts.py)
+sh backend/tests/check_conventions.sh
+sh backend/tests/check_api_conventions.sh
 ```
 
-Test tích hợp `tests/integration/test_local_env.py` tự bỏ qua nếu không có Docker.
+Hướng dẫn rebase nhánh cũ: `docs/rebase-monorepo.md`.
+
+Test tích hợp `backend/tests/integration/test_local_env.py` tự bỏ qua nếu không có Docker.

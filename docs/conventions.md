@@ -74,4 +74,4 @@ Tiêu đề PR dùng cùng định dạng với dòng tiêu đề commit.
 
 ## 4. Kiểm tra tự động
 
-Chạy `sh tests/check_conventions.sh` để kiểm tra tài liệu và mẫu PR có đủ nội dung bắt buộc, và các ví dụ khớp biểu thức chính quy.
+Chạy `sh backend/tests/check_conventions.sh` để kiểm tra tài liệu và mẫu PR có đủ nội dung bắt buộc, và các ví dụ khớp biểu thức chính quy.

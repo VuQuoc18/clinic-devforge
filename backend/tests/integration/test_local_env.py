@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 PORT = "55442"  # cổng riêng để không đụng môi trường dev đang chạy
 PROJECT = "clinic-local-it"
 

@@ -1,6 +1,6 @@
 #!/bin/sh
 # Kiểm tra tài liệu quy ước và mẫu PR (REQ-006).
-cd "$(dirname "$0")/.." || exit 1
+cd "$(dirname "$0")/../.." || exit 1
 fail=0
 err() { echo "FAIL: $1"; fail=1; }
 

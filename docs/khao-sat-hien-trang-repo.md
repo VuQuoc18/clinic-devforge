@@ -38,7 +38,7 @@ Kết luận: trên `master` **chưa có nền nào**. Mã duy nhất là nhánh
 | Quản lý phụ thuộc | `requirements.txt` không pin chặt (`>=`); không lockfile | `requirements.txt` |
 | README | Rỗng trên master; nhánh TASK-0001 cũng không hướng dẫn chạy | — |
 | `.gitignore` | Tối thiểu: `app.db`, `__pycache__/`, `.pytest_cache/` | `.gitignore` |
-| Kiểu repo | Hiện là một repo đơn, bố cục phẳng (`app/`, `migrations/`, `tests/` ở gốc). Chưa có `backend/`, `frontend/`. **Chưa kết luận monorepo hay tách repo** | — |
+| Kiểu repo | Monorepo (REQ-001, TASK-0042): `backend/`, `frontend/`, `docs/` ở gốc; `common/`, `db/`, `tests/` nằm trong `backend/`. Thư mục đích của `common/`, `db/`, `tests/` là **giả định ban đầu, chờ PM/tech lead xác nhận** (xem Q2 mục 6). | — |
 | Thư mục tài liệu | Chưa có trước task này; `docs/` được tạo bởi tài liệu này | — |
 
 ## 4. Đã có / còn thiếu theo REQ
@@ -69,7 +69,7 @@ Cột "Người chịu trách nhiệm" là **vai trò đề xuất**. Repo và b
 | # | Câu hỏi mở | Trạng thái | Người chịu trách nhiệm (đề xuất) | Dữ kiện hiện có / ảnh hưởng |
 |---|---|---|---|---|
 | Q1 | Stack backend / frontend / DB chính thức là gì? | **Còn chờ** (chưa có xác nhận). Chỉ có dấu vết ngầm: Python + SQLAlchemy + Alembic + SQLite dev. Frontend chưa có gì. | Tech lead | Chặn REQ-005 (công cụ lint) và phần dựng mới của REQ-001. Liên quan DEC-0001. |
-| Q2 | Kiểu repo: monorepo hay tách backend/frontend? | **Còn chờ** | Tech lead | Chặn bố cục thư mục và cách CI chạy (REQ-001, REQ-010). Hiện là một repo `clinic-devforge`, bố cục phẳng. |
+| Q2 | Kiểu repo: monorepo hay tách backend/frontend? | **Đã chốt monorepo** theo REQ-001 (TASK-0042). **Còn chờ xác nhận**: thư mục đích của `common/`, `db/`, `tests/` (hiện đặt trong `backend/` theo giả định ban đầu). | Tech lead / PM | Xác nhận phải được ghi thành DEC hoặc cập nhật PRD và dẫn vào PR/CHANGELOG trước khi merge. Ảnh hưởng cách CI chạy (REQ-010). |
 | Q3 | Nơi triển khai và nền tảng CI? | **Còn chờ**. Remote là GitHub (`VuQuoc18/clinic-devforge`) nhưng chưa có xác nhận dùng GitHub Actions và chưa có thông tin môi trường chạy. | Tech lead phối hợp DevOps/chủ dự án | Chặn REQ-010; DB production chưa rõ. |
 | Q4 | Convention sẵn có (code style, đặt tên, commit/branch, quy trình PR)? | **Còn chờ**. Trong repo chỉ thấy quy ước ngầm: nhánh `devforge/task-NNNN-<slug>`, commit `TASK-NNNN: <mô tả>`, test chia `unit`/`integration`. Chưa có tài liệu convention hay cấu hình formatter. | Tech lead | Chặn bộ quy tắc REQ-005. |
 

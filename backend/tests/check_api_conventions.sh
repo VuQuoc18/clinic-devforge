@@ -1,7 +1,7 @@
 #!/bin/sh
 # Kiểm tra tài liệu quy ước API có đủ 3 mục, ví dụ request/response và ghi chú DEC-0001.
 set -e
-f="$(dirname "$0")/../docs/api-conventions.md"
+f="$(dirname "$0")/../../docs/api-conventions.md"
 fail() { echo "FAIL: $1"; exit 1; }
 
 [ -f "$f" ] || fail "missing $f"
