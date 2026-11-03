@@ -40,6 +40,8 @@ def test_root_make_default_db_is_at_repo_root_not_backend():
         assert not backend_db.exists()
     finally:
         root_db.unlink(missing_ok=True)
+        # app.db chưa tồn tại trước test nên nếu có thì do lần chạy này tạo ra: dọn để không bỏ lại trong repo.
+        backend_db.unlink(missing_ok=True)
 
 
 def test_root_make_relative_path_is_relative_to_repo_root():
@@ -49,3 +51,12 @@ def test_root_make_relative_path_is_relative_to_repo_root():
         assert r.returncode == 0, r.stderr
         assert os.path.exists(os.path.join(d, "rel.db"))
         assert not (ROOT / "backend" / rel).exists()
+
+
+def test_root_make_migrate_supports_path_with_spaces():
+    with tempfile.TemporaryDirectory() as d:
+        db = os.path.join(d, "thu muc co dau cach", "x y.db")
+        os.makedirs(os.path.dirname(db))
+        r = _make("migrate", f"DATABASE_PATH={db}")
+        assert r.returncode == 0, r.stderr
+        assert os.path.exists(db)
