@@ -1,7 +1,15 @@
 # Hướng dẫn rebase nhánh `devforge/task-00xx` sau PR monorepo (TASK-0042)
 
-Mốc: PR TASK-0042 (REQ-001) là mốc rebase duy nhất. Chủ nhánh `devforge/task-00xx`
+Mốc: PR TASK-0042 (REQ-001, DEC-0112) là mốc rebase dự kiến. Chủ nhánh `devforge/task-00xx`
 rebase lên `master` sau khi PR này merge.
+
+**Điều kiện để đây là mốc rebase duy nhất:**
+
+- Task chuyển Alembic (#43) phải nằm trong cùng PR, theo DEC-0112. PR này chưa có phần Alembic:
+  runner vẫn là `backend/db/migrate.py` (SQL). Nếu Alembic merge ở PR khác và thay `backend/db/`,
+  các nhánh phải rebase thêm một lần. Cần PM/tech lead gộp PR hoặc xác nhận ngoại lệ bằng văn bản.
+- Thư mục đích `backend/` cho `common/`, `db/`, `tests/` là **giả định ban đầu, chưa có DEC/PRD xác nhận**.
+  Chỉ thông báo mốc rebase sau khi có xác nhận. Nếu đích khác, phải dời lại và cập nhật bảng dưới.
 
 ## Ánh xạ đường dẫn
 

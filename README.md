@@ -61,7 +61,7 @@ DB SQLite mặc định vẫn là `app.db` ở **gốc repo** (như trước khi
 mặc định mới là `backend/app.db`.
 
 Hiện runner migration là script SQL (`backend/db/migrate.py`, xem `docs/db-migrations.md`);
-việc chuyển sang Alembic nằm ở task riêng. Backend chưa có web server/entrypoint để chạy.
+việc chuyển sang Alembic thuộc task riêng (#43; theo DEC-0112 phải cùng PR với việc dời cấu trúc, chưa gộp). Backend chưa có web server/entrypoint (FastAPI) để chạy; phần này và frontend thuộc các task sau, REQ-001 chưa đóng bằng PR này.
 
 ## Frontend
 
@@ -73,6 +73,7 @@ Chưa chạy được: `frontend/` chưa có mã nguồn. Hướng dẫn chạy 
 python -m pytest backend/tests     # từ gốc, chạy toàn bộ test
 cd backend && python -m pytest tests
 make test                          # từ gốc; giữ nguyên runner cũ (unittest discover), chỉ gồm test dạng unittest
+                                   # (hai script check_*.sh cũng được gọi bởi pytest: integration/test_check_scripts.py)
 sh backend/tests/check_conventions.sh
 sh backend/tests/check_api_conventions.sh
 ```
